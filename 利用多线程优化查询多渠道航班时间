@@ -1,0 +1,44 @@
+前不久项目中客户那边有个需求，具体情况是他们选择日期查询航班集合，要用到51book和世航国旅这两个机票渠道商，在这里我用线程池开启两个线程同时去查渠道，最后
+利用Callable有返回值特性把集合结合在一起。
+献上主要代码：
+注意：cpu要多核，且要开启多核
+private ExecutorService executor = Executors.newFixedThreadPool(2);
+        executor.submit(new Callable<Object>() {
+            @Override
+            public Object call() throws Exception {
+                Thread.currentThread().setName("51BOOK线程");
+                BaseResponse<QueryAirTicketInfoResponseTO> queryAirTicketInfoResponseTO =  queryFlightHandler.queryWYBOOKFlight(queryAirTicketInfoRequestTO);
+                return queryAirTicketInfoList.add(queryAirTicketInfoResponseTO);
+            }
+        });
+        executor.submit(new Callable<Object>() {
+
+            @Override
+            public Object call() throws Exception {
+                Thread.currentThread().setName("SHGL线程");
+                BaseResponse<QueryAirTicketInfoResponseTO> queryAirTicketInfoResponseTO =  queryFlightHandler.queryShglFlight(queryAirTicketInfoRequestTO);
+                return queryAirTicketInfoList.add(queryAirTicketInfoResponseTO);
+            }
+        });
+        //等待线程执行完毕
+        while (CollectionUtils.isEmpty(queryAirTicketInfoList) || queryAirTicketInfoList.size() == 1){
+            Thread.sleep(100);
+        }
+        queryAirTicketInfoResponseTO.setMessage(queryAirTicketInfoList.get(0).getMessage());
+        queryAirTicketInfoResponseTO.setErrorMsg(queryAirTicketInfoList.get(0).getErrorMsg());
+        queryAirTicketInfoResponseTO.setCode(queryAirTicketInfoList.get(0).getCode());
+        List<JourneyTO> journeyTOList = new ArrayList<>();
+        QueryAirTicketInfoResponseTO queryAirTicketInfo = new QueryAirTicketInfoResponseTO();
+        for (BaseResponse<QueryAirTicketInfoResponseTO> queryAirTicketInfoResponse : queryAirTicketInfoList){
+            queryAirTicketInfo.setReturnDate(queryAirTicketInfoResponse.getData().getReturnDate());
+            queryAirTicketInfo.setArriveCityCode(queryAirTicketInfoResponse.getData().getArriveCityCode());
+            queryAirTicketInfo.setJourneyType(queryAirTicketInfoResponse.getData().getJourneyType());
+            queryAirTicketInfo.setSetoutCityCode(queryAirTicketInfoResponse.getData().getSetoutCityCode());
+            queryAirTicketInfo.setSetoutDate(queryAirTicketInfoResponse.getData().getSetoutDate());
+            if (queryAirTicketInfoResponse.getData().getShglSid()!=null){
+                queryAirTicketInfo.setShglSid(queryAirTicketInfoResponse.getData().getShglSid());
+            }
+            journeyTOList.addAll(queryAirTicketInfoResponse.getData().getJourneys());
+            queryAirTicketInfo.setJourneys(journeyTOList);
+            queryAirTicketInfoResponseTO.setData(queryAirTicketInfo);
+        }
